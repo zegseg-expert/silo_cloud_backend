@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, redirect, url_for
 import csv
 import os
 from datetime import datetime
@@ -17,6 +17,13 @@ if not os.path.exists(DATA_FILE):
     with open(DATA_FILE, mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(["Timestamp", "Latitude", "Longitude", "Temp(C)", "Humidity(%)", "Gas(ppm)", "Image", "Command_Issued", "AI_Detection"])
+
+# =========================================================
+# NEW ROUTE: This fixes the 404 error on the homepage!
+# =========================================================
+@app.route('/')
+def home():
+    return redirect('/dashboard')
 
 @app.route('/detect', methods=['POST'])
 def detect():
