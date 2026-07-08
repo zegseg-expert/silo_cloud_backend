@@ -9,8 +9,10 @@ DATA_FILE = "silo_data_log.csv"
 SILO_LATITUDE = "7.3775"   
 SILO_LONGITUDE = "3.9470"  
 
-# Your Hugging Face Token
-HF_TOKEN = "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"
+# =========================================================
+# YOUR NEW HUGGING FACE TOKEN
+# =========================================================
+HF_TOKEN = os.getenv("HF_TOKEN", "")
 
 # Create CSV headers if it doesn't exist
 if not os.path.exists(DATA_FILE):
@@ -19,7 +21,7 @@ if not os.path.exists(DATA_FILE):
         writer.writerow(["Timestamp", "Latitude", "Longitude", "Temp(C)", "Humidity(%)", "Gas(ppm)", "Image", "Command_Issued", "AI_Detection"])
 
 # =========================================================
-# NEW ROUTE: This fixes the 404 error on the homepage!
+# HOMEPAGE REDIRECT (Fixes the 404 error)
 # =========================================================
 @app.route('/')
 def home():
