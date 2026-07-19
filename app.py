@@ -3,26 +3,22 @@ import csv
 import os
 from datetime import datetime
 import requests
+import joblib
+import pandas as pd
 
 app = Flask(__name__)
 DATA_FILE = "silo_data_log.csv"
 SILO_LATITUDE = "7.3775"   
 SILO_LONGITUDE = "3.9470"  
 
-# =========================================================
-# YOUR NEW HUGGING FACE TOKEN
-# =========================================================
-HF_TOKEN = os.getenv("HF_TOKEN", "")
+# Load your trained Climate AI model
+climate_model = joblib.load('climate_predictor.joblib')
 
-# Create CSV headers if it doesn't exist
 if not os.path.exists(DATA_FILE):
     with open(DATA_FILE, mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(["Timestamp", "Latitude", "Longitude", "Temp(C)", "Humidity(%)", "Gas(ppm)", "Image", "Command_Issued", "AI_Detection"])
 
-# =========================================================
-# HOMEPAGE REDIRECT (Fixes the 404 error)
-# =========================================================
 @app.route('/')
 def home():
     return redirect('/dashboard')
@@ -32,8 +28,6 @@ def detect():
     print("--- NEW DATA RECEIVED ---")
     image_file = request.files['image']
     image_name = image_file.filename
-    print(f"Image: {image_name}")
-
     sensor_data = request.form.get('sensor_data')
     temp, humidity, gas = 0, 0, 0
     if sensor_data:
@@ -42,51 +36,24 @@ def detect():
         humidity = data.get('humidity')
         gas = data.get('gas')
 
-    # =========================================================
-    # THE LOW-MEMORY CLOUD AI (Sends image to Hugging Face)
-    # =========================================================
-    ai_detection = "None"
-    try:
-        img_bytes = image_file.read()
-        api_url = "https://api-inference.huggingface.co/models/facebook/detr-resnet-50"
-        headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-        response = requests.post(api_url, headers=headers, data=img_bytes)
-        
-        if response.status_code == 200:
-            result = response.json()
-            if len(result) > 0:
-                best = max(result, key=lambda x: x['score'])
-                label = best['label']
-                confidence = best['score'] * 100
-                ai_detection = f"Detected {label} ({confidence:.1f}% confidence)"
-                print(f"🤖 CLOUD AI sees: {ai_detection}")
-        else:
-            print(f"⚠️ HF API Error: {response.status_code}")
-            ai_detection = "Cloud AI Error"
-    except Exception as e:
-        print(f"❌ Cloud AI Error: {e}")
-
-    # DECISION ENGINE
+    # Fake AI for the cloud (since Render cannot run YOLO)
+    ai_detection = "Cloud Mode: AI disabled"
     command = "IDLE"
     alert_message = "Grain conditions are safe."
 
-    if ai_detection != "None" and "Error" not in ai_detection:
-        command = "FUMIGATE"
-        alert_message = f"🚨 {ai_detection}! Sealing silo!"
-    elif float(humidity) > 14 and float(gas) > 400:
+    if float(humidity) > 14 and float(gas) > 400:
         command = "FUMIGATE"
         alert_message = "CRITICAL: High mold/pest risk."
     elif float(humidity) > 14 or float(gas) > 400:
         command = "VENT_OPEN"
         alert_message = "WARNING: High humidity/gas detected."
     
-    # SAVE TO CSV
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(DATA_FILE, mode='a', newline='') as file:
         writer = csv.writer(file)
         writer.writerow([timestamp, SILO_LATITUDE, SILO_LONGITUDE, temp, humidity, gas, image_name, command, ai_detection])
     
-    return jsonify({"command": command, "alert": alert_message, "ai_detected": ai_detection})
+    return jsonify({"command": command, "alert": alert_message})
 
 @app.route('/dashboard')
 def dashboard():
@@ -135,5 +102,33 @@ def dashboard():
     html_content += "</table></body></html>"
     return html_content
 
+@app.route('/forecast')
+def forecast():
+    # Get the current month
+    current_month = datetime.now().month
+    # For demo, let's test with 35°C and Year 2025
+    test_data = pd.DataFrame({
+        'Year': [2025],
+        'Month': [current_month],
+        'Max_Temp_C': [35.0]
+    })
+    prediction = climate_model.predict(test_data)[0]
+    probability = climate_model.predict_proba(test_data)[0][1]
+    risk = "HIGH RISK (Fumigate!)" if prediction == 1 else "SAFE"
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head><title>Climate Forecast</title></head>
+    <body style="font-family: Arial; padding: 20px;">
+    <h1>🌦️ Nigerian Climate Risk Forecast</h1>
+    <p><strong>State:</strong> Lagos (Demo)</p>
+    <p><strong>Month:</strong> {current_month}</p>
+    <p><strong>Temperature:</strong> 35°C</p>
+    <p><strong>Predicted Risk:</strong> <span style="color:red;">{risk}</span></p>
+    <p><strong>AI Confidence:</strong> {probability*100:.2f}%</p>
+    <p><a href="/dashboard">Back to Silo Dashboard</a></p>
+    </body>
+    </html>
+    """
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
